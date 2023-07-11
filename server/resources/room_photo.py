@@ -42,7 +42,8 @@ class RoomPhoto(Resource):
 
     @classmethod
     def post(cls, room_id):
-        photo_title, photo_description = request.form.values()
+        # photo_title, photo_description = request.form.values()
+        photo_title, photo_description = "photo title", "photo description"
         photo_file = request.files['photo']
 
         if photo_title is None or photo_description is None or photo_file is None:
