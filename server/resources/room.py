@@ -1,8 +1,8 @@
 ﻿from http import HTTPStatus
-
+from datetime import datetime as create_date
 from flask import request, abort
 from flask_restful import Resource, reqparse
-from models import RoomModel, RoomLocations, RoomTypes
+from models import RoomModel, RoomLocations, RoomTypes, HostFreeDatesModel
 
 const_rooms_args = [
     "offset", "size", 
@@ -10,6 +10,27 @@ const_rooms_args = [
     "rooms_count", "max_cost", "min_rate",
     "sort_by_cost"
 ]
+
+
+def _str2date(str_date):
+    separated_date = str_date.split('/')
+    try:
+        [dd, mm, yy] = [int(el) for el in separated_date]
+        return create_date(yy, mm, dd)
+    except IndexError:
+        raise ValueError(f"incorrect date format: {str_date}")
+
+
+def parse_dates(dates_array):
+    dates = []
+    for date in dates_array:
+        if _str2date(date['date_from']) > _str2date(date['date_to']):
+            raise ValueError("date from must be earlier than date_to")
+        dates.append((
+            _str2date(date['date_from']),
+            _str2date(date['date_to'])
+        ))
+    return dates
 
 
 def validate_room_location(value):
@@ -52,6 +73,9 @@ room_obj_args_parser.add_argument(
 room_obj_args_parser.add_argument(
     "rooms_count", type=int, required=True, help="rooms_count is required arg"
 )
+room_obj_args_parser.add_argument(
+    "room_dates", type=parse_dates, required=True, help="{error_msg}"
+)
 
 
 def get_args(*params):
@@ -85,6 +109,8 @@ class Rooms(Resource):
     def post(cls):
         args = room_obj_args_parser.parse_args()
 
+        dates = args['room_dates']
+
         room = RoomModel(
             title=args['title'],
             subtitle=args['subtitle'],
@@ -95,8 +121,14 @@ class Rooms(Resource):
             rooms_count=args['rooms_count'],
             host_id=args['host_id']
         )
+
         room.save_to_db()
-        return {"message": "Successfully created room"}, HTTPStatus.OK
+
+        [HostFreeDatesModel(
+            host_id=args['host_id'], date_from=date[0], date_to=date[1], room_id=room.id  # noqa: E501
+            ).save_to_db() for date in dates]
+
+        return {"message": f"Successfully created room", "room_id": room.id}, HTTPStatus.CREATED
 
 
 class Room(Resource):
